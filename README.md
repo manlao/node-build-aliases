@@ -8,6 +8,12 @@
 git clone https://github.com/manlao/node-build-aliases.git $(nodenv root)/plugins/node-build-aliases
 ```
 
+### Installing with homebrew
+
+```shell
+brew install manlao/tap/node-build-aliases
+```
+
 ### macOS
 
 ## Usage
