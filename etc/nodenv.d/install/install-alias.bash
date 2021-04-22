@@ -27,10 +27,8 @@ resolve_versions() {
 
 alias_versions() {
   if [ "$STATUS" -eq 0 ] && [ -n "$VERSION_NAME" ] && [ -f "$(nodenv-aliases --definitions_path)/$VERSION_NAME" ]; then
-    local ALIASES=()
+    local ALIASES ALIAS
     IFS=" " read -ra ALIASES <<< "$(nodenv-aliases --resolve_aliases "$VERSION_NAME")"
-
-    local ALIAS
 
     for ALIAS in "${ALIASES[@]}"; do
       if [ -n "$ALIAS" ]; then

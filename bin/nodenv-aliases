@@ -29,9 +29,7 @@ resolve_link() {
 }
 
 realpath() {
-  local CWD="$PWD"
-  local REALPATH="$1"
-  local NAME
+  local CWD="$PWD" REALPATH="$1" NAME
 
   while [ -n "$REALPATH" ]; do
     NAME="${REALPATH##*/}"
@@ -51,32 +49,30 @@ realdir() {
 }
 
 resolve_definition() {
-  local REALPATH
-  REALPATH=$(resolve_link "$(aliases_path)/$1")
+  local ALIASES_PATH ALIAS="$1" DEFINITION=""
+  ALIASES_PATH=$(aliases_path)
 
-  echo "${REALPATH##*/}"
+  while [ -z "$DEFINITION" ]; do
+    local REALPATH
+    REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
+
+    if [ -L "$REALPATH" ]; then
+      ALIAS="${REALPATH/$ALIASES_PATH\//}"
+    else
+      DEFINITION="${REALPATH##*/}"
+    fi
+  done
+
+  echo "$DEFINITION"
 }
 
 resolve_aliases() {
-  local ALIASES_PATH
-  ALIASES_PATH=$(aliases_path)
-  local ALIASES ALIAS
-  local RESOLVED=()
+  local ALIASES ALIAS RESOLVED=()
   IFS=" " read -ra ALIASES <<< "$(get_aliases)"
 
   for ALIAS in "${ALIASES[@]}"; do
-    local REALPATH
-    REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
     local DEFINITION=
-
-    while [ -z "$DEFINITION" ]; do
-      if [ -L "$REALPATH" ]; then
-        local LINK_ALIAS="${REALPATH/$ALIASES_PATH\//}"
-        REALPATH=$(resolve_link "$ALIASES_PATH/$LINK_ALIAS")
-      else
-        DEFINITION="${REALPATH##*/}"
-      fi
-    done
+    DEFINITION=$(resolve_definition "$ALIAS")
 
     if [ "$DEFINITION" = "$1" ]; then
       RESOLVED+=("$ALIAS")
@@ -87,12 +83,8 @@ resolve_aliases() {
 }
 
 get_aliases() {
-  local PREFIX="${1+$1/}"
-  local PATTERN
+  local PATTERN ITEM PREFIX="${1+$1/}" ALIASES=() DIRS=()
   PATTERN="$(aliases_path)/$PREFIX*"
-  local ALIASES=()
-  local DIRS=()
-  local ITEM
 
   for ITEM in $PATTERN; do
     if [ -L "$ITEM" ]; then
@@ -112,19 +104,16 @@ get_aliases() {
 }
 
 get_alias_info() {
-  local ALIAS="$1"
-  local INFO="$ALIAS"
-  local ALIASES_PATH
+  local DEFINITION ALIASES_PATH ALIAS="$1" INFO="$ALIAS"
   ALIASES_PATH=$(aliases_path)
-  local REALPATH
-  REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
-  local DEFINITION
 
   while [ -z "$DEFINITION" ]; do
+    local REALPATH
+    REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
+
     if [ -L "$REALPATH" ]; then
       ALIAS="${REALPATH/$ALIASES_PATH\//}"
       INFO="$INFO -> $ALIAS"
-      REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
     else
       DEFINITION="${REALPATH##*/}"
       INFO="$INFO -> $DEFINITION"
@@ -148,11 +137,9 @@ list() {
 }
 
 update() {
-  local ALIASES_PATH
+  local ALIASES_PATH DEFINITIONS_PATH INDEX_TABLE
   ALIASES_PATH=$(aliases_path)
-  local DEFINITIONS_PATH
   DEFINITIONS_PATH=$(definitions_path)
-  local INDEX_TABLE
   INDEX_TABLE=$(curl -fsSL "https://nodejs.org/dist/index.tab")
 
   # https://github.com/nvm-sh/nvm/blob/master/nvm.sh
@@ -174,8 +161,7 @@ update() {
         }
       }' \
     | while read -r LINE; do
-      local ALIAS="${LINE%% *}"
-      local VERSION="${LINE#* }"
+      local ALIAS="${LINE%% *}" VERSION="${LINE#* }"
 
       mkdir -p "$(dirname "$ALIASES_PATH/$ALIAS")"
 
@@ -186,21 +172,19 @@ update() {
       fi
     done
 
-  local MANIFEST
+  local MANIFEST LATEST
   read -ra MANIFEST < <(echo "$INDEX_TABLE" | grep src | sort -rn -t $'\t' -k2,2 -k1,1 | head -1)
-  local LATEST="${MANIFEST[0]}"
+  LATEST="${MANIFEST[0]}"
   ln -sf "$DEFINITIONS_PATH/${LATEST##*v}" "$ALIASES_PATH/node"
 
-  local VERSIONS_PATH
+  local VERSIONS_PATH ALIASES ALIAS
   VERSIONS_PATH="$(nodenv root)/versions"
-  local ALIASES ALIAS
   IFS=" " read -ra ALIASES <<< "$(get_aliases)"
 
   for ALIAS in "${ALIASES[@]}"; do
     if [ -L "$VERSIONS_PATH/$ALIAS" ]; then
-      local REALPATH
+      local REALPATH DEFINITION
       REALPATH=$(realpath "$VERSIONS_PATH/$ALIAS")
-      local DEFINITION
       DEFINITION=$(resolve_definition "$ALIAS")
 
       if [ "${REALPATH##*/}" != "$DEFINITION" ]; then
