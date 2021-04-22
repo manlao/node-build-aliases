@@ -9,3 +9,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: jasonkarns/create-release@master
+
+  homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mislav/bump-homebrew-formula-action@v1
+        with:
+          formula-name: node-build-aliases
+          homebrew-tap: manlao/homebrew-tap
+        env:
+          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
