@@ -137,13 +137,20 @@ list() {
 }
 
 update() {
-  local ALIASES_PATH DEFINITIONS_PATH INDEX_TABLE
+  if nodenv commands | grep "update-version-defs" 1>/dev/null 2>&1; then
+    nodenv prune-version-defs -f
+    nodenv update-version-defs
+  fi
+
+  local ALIASES_PATH DEFINITIONS_PATH PLUGIN_DEFINITIONS_PATH INDEX_TABLE
   ALIASES_PATH=$(aliases_path)
   DEFINITIONS_PATH=$(definitions_path)
+  PLUGIN_DEFINITIONS_PATH=$(plugin_definitions_path)
   INDEX_TABLE=$(curl -fsSL "https://nodejs.org/dist/index.tab")
 
   # https://github.com/nvm-sh/nvm/blob/master/nvm.sh
-  echo "$INDEX_TABLE" \
+  local LTS_LINES
+  LTS_LINES=$(echo "$INDEX_TABLE" \
     | command sed "1d; s/^//;" \
     | command awk '{
         if ($10 ~ /^\-?$/) { next }
@@ -159,23 +166,33 @@ update() {
         if (alias) {
           print alias, version
         }
-      }' \
-    | while read -r LINE; do
-      local ALIAS="${LINE%% *}" VERSION="${LINE#* }"
+      }')
 
-      mkdir -p "$(dirname "$ALIASES_PATH/$ALIAS")"
+  while read -r LINE; do
+    local ALIAS="${LINE%% *}" VERSION="${LINE#* }" SOURCE_FILE="$ALIASES_PATH/$VERSION"
 
-      if [[ "$VERSION" =~ ^(v|V)([0-9\.]+)$ ]]; then
-        ln -sf "$DEFINITIONS_PATH/${BASH_REMATCH[2]}" "$ALIASES_PATH/$ALIAS"
-      else
-        ln -sf "$ALIASES_PATH/$VERSION" "$ALIASES_PATH/$ALIAS"
+    mkdir -p "$(dirname "$ALIASES_PATH/$ALIAS")"
+
+    if [[ "$VERSION" =~ ^(v|V)([0-9\.]+)$ ]]; then
+      if [ -f "$DEFINITIONS_PATH/${BASH_REMATCH[2]}" ]; then
+        SOURCE_FILE="$DEFINITIONS_PATH/${BASH_REMATCH[2]}"
+      elif [ -n "$PLUGIN_DEFINITIONS_PATH" ] && [ -f "$PLUGIN_DEFINITIONS_PATH/${BASH_REMATCH[2]}" ]; then
+        SOURCE_FILE="$PLUGIN_DEFINITIONS_PATH/${BASH_REMATCH[2]}"
       fi
-    done
+    fi
+
+    ln -sf "$SOURCE_FILE" "$ALIASES_PATH/$ALIAS"
+  done <<< "$LTS_LINES"
 
   local MANIFEST LATEST
   read -ra MANIFEST < <(echo "$INDEX_TABLE" | grep src | sort -rn -t $'\t' -k2,2 -k1,1 | head -1)
-  LATEST="${MANIFEST[0]}"
-  ln -sf "$DEFINITIONS_PATH/${LATEST##*v}" "$ALIASES_PATH/node"
+  LATEST="${MANIFEST[0]##*v}"
+
+  if [ -f "$DEFINITIONS_PATH/$LATEST" ]; then
+    ln -sf "$DEFINITIONS_PATH/$LATEST" "$ALIASES_PATH/node"
+  elif [ -n "$PLUGIN_DEFINITIONS_PATH" ] && [ -f "$PLUGIN_DEFINITIONS_PATH/$LATEST" ]; then
+    ln -sf "$PLUGIN_DEFINITIONS_PATH/$LATEST" "$ALIASES_PATH/node"
+  fi
 
   local VERSIONS_PATH ALIASES ALIAS
   VERSIONS_PATH="$(nodenv root)/versions"
@@ -196,6 +213,8 @@ update() {
       fi
     fi
   done
+
+  list
 }
 
 version() {
@@ -210,6 +229,12 @@ definitions_path() {
   echo "$(realdir "$(command -v nodenv-install)")/../share/node-build"
 }
 
+plugin_definitions_path() {
+  if nodenv commands | grep "update-version-defs" 1>/dev/null 2>&1; then
+    echo "$(realdir "$(command -v "nodenv-update-version-defs")")/../share/node-build"
+  fi
+}
+
 case "$#" in
   0 )
     list
@@ -220,7 +245,7 @@ case "$#" in
       --update )
         update
         ;;
-      --version | --aliases_path | --definitions_path )
+      --version | --aliases_path | --definitions_path | --plugin_definitions_path )
         "${1##*-}"
         ;;
       * )

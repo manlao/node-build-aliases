@@ -9,16 +9,18 @@ resolve_versions() {
 }
 
 unalias_versions() {
-  if [ "$STATUS" -eq 0 ] && [ -n "$VERSION_NAME" ] && [ ! -d "$NODENV_ROOT/versions/$VERSION_NAME" ] && [ -f "$(nodenv-aliases --definitions_path)/$VERSION_NAME" ]; then
-    local ALIASES ALIAS
-    IFS=" " read -ra ALIASES <<< "$(nodenv-aliases --resolve_aliases "$VERSION_NAME")"
+  if [ "$STATUS" -eq 0 ] && [ -n "$VERSION_NAME" ]; then
+    if [ -f "$(nodenv-aliases --definitions_path)/$VERSION_NAME" ] || [ -f "$(nodenv-aliases --plugin_definitions_path)/$VERSION_NAME" ]; then
+      local ALIASES ALIAS
+      IFS=" " read -ra ALIASES <<< "$(nodenv-aliases --resolve_aliases "$VERSION_NAME")"
 
-    for ALIAS in "${ALIASES[@]}"; do
-      if [ -L "$NODENV_ROOT/versions/$ALIAS" ]; then
-        rm -f "$NODENV_ROOT/versions/$ALIAS"
-        echo "Unalias: $ALIAS"
-      fi
-    done
+      for ALIAS in "${ALIASES[@]}"; do
+        if [ -L "$NODENV_ROOT/versions/$ALIAS" ]; then
+          rm -f "$NODENV_ROOT/versions/$ALIAS"
+          echo "Unalias: $ALIAS"
+        fi
+      done
+    fi
   fi
 }
 
