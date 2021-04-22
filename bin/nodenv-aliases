@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+#
+# Summary: List or Update Node aliases
+#
+# Usage: nodenv aliases
+#        nodenv aliases --update [--upgrade]
+#        nodenv aliases --version
+#
+#   --update        Update aliases from nodejs.org
+#     --upgrade          Upgrade installed aliases
+#   --version          Show version of node-build-aliases
+#
+# More: https://github.com/manlao/node-build-aliases
+
+set -e
+[ -n "$NODENV_DEBUG" ] && set -x
+
+shopt -s nullglob
+
+READLINK=$(type -p greadlink readlink 2>/dev/null | head -1)
+
+if [ -z "$READLINK" ]; then
+  echo "cannot find readlink - are you missing GNU coreutils?" >&2
+  exit 1
+fi
+
+resolve_link() {
+  "$READLINK" "$1"
+}
+
+realpath() {
+  local CWD="$PWD"
+  local REALPATH="$1"
+  local NAME
+
+  while [ -n "$REALPATH" ]; do
+    NAME="${REALPATH##*/}"
+    [ "$NAME" = "$REALPATH" ] || cd "${REALPATH%/*}" || exit 1
+    REALPATH="$(resolve_link "$NAME" || true)"
+  done
+
+  echo "${PWD}/$NAME"
+  cd "$CWD" || exit 1
+}
+
+realdir() {
+  local REALPATH
+  REALPATH=$(realpath "$1")
+
+  echo "${REALPATH%/*}"
+}
+
+resolve_definition() {
+  local REALPATH
+  REALPATH=$(resolve_link "$(aliases_path)/$1")
+
+  echo "${REALPATH##*/}"
+}
+
+resolve_aliases() {
+  local ALIASES_PATH
+  ALIASES_PATH=$(aliases_path)
+  local ALIASES ALIAS
+  local RESOLVED=()
+  IFS=" " read -ra ALIASES <<< "$(get_aliases)"
+
+  for ALIAS in "${ALIASES[@]}"; do
+    local REALPATH
+    REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
+    local DEFINITION=
+
+    while [ -z "$DEFINITION" ]; do
+      if [ -L "$REALPATH" ]; then
+        local LINK_ALIAS="${REALPATH/$ALIASES_PATH\//}"
+        REALPATH=$(resolve_link "$ALIASES_PATH/$LINK_ALIAS")
+      else
+        DEFINITION="${REALPATH##*/}"
+      fi
+    done
+
+    if [ "$DEFINITION" = "$1" ]; then
+      RESOLVED+=("$ALIAS")
+    fi
+  done
+
+  echo "${RESOLVED[@]}"
+}
+
+get_aliases() {
+  local PREFIX="${1+$1/}"
+  local PATTERN
+  PATTERN="$(aliases_path)/$PREFIX*"
+  local ALIASES=()
+  local DIRS=()
+  local ITEM
+
+  for ITEM in $PATTERN; do
+    if [ -L "$ITEM" ]; then
+      ALIASES+=("$PREFIX${ITEM##*/}")
+    elif [ -d "$ITEM" ]; then
+      DIRS+=("$ITEM")
+    fi
+  done
+
+  for ITEM in "${DIRS[@]}"; do
+    local DIR_ALIASES
+    DIR_ALIASES=$(get_aliases "$PREFIX${ITEM##*/}")
+    ALIASES+=("${DIR_ALIASES[@]}")
+  done
+
+  echo "${ALIASES[@]}"
+}
+
+get_alias_info() {
+  local ALIAS="$1"
+  local INFO="$ALIAS"
+  local ALIASES_PATH
+  ALIASES_PATH=$(aliases_path)
+  local REALPATH
+  REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
+  local DEFINITION
+
+  while [ -z "$DEFINITION" ]; do
+    if [ -L "$REALPATH" ]; then
+      ALIAS="${REALPATH/$ALIASES_PATH\//}"
+      INFO="$INFO -> $ALIAS"
+      REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
+    else
+      DEFINITION="${REALPATH##*/}"
+      INFO="$INFO -> $DEFINITION"
+    fi
+  done
+
+  if [ -d "$(nodenv root)/versions/$DEFINITION" ]; then
+    echo "$INFO (installed)"
+  else
+    echo "$INFO"
+  fi
+}
+
+list() {
+  local ALIASES ALIAS
+  IFS=" " read -ra ALIASES <<< "$(get_aliases)"
+
+  for ALIAS in "${ALIASES[@]}"; do
+    get_alias_info "$ALIAS"
+  done
+}
+
+update() {
+  local ALIASES_PATH
+  ALIASES_PATH=$(aliases_path)
+  local DEFINITIONS_PATH
+  DEFINITIONS_PATH=$(definitions_path)
+  local INDEX_TABLE
+  INDEX_TABLE=$(curl -fsSL "https://nodejs.org/dist/index.tab")
+
+  # https://github.com/nvm-sh/nvm/blob/master/nvm.sh
+  echo "$INDEX_TABLE" \
+    | command sed "1d; s/^//;" \
+    | command awk '{
+        if ($10 ~ /^\-?$/) { next }
+        if ($10 && !a[tolower($10)]++) {
+          if (alias) { print alias, version }
+          alias_name = "lts/" tolower($10)
+          if (!alias) { print "lts/*", alias_name }
+          alias = alias_name
+          version = $1
+        }
+      }
+      END {
+        if (alias) {
+          print alias, version
+        }
+      }' \
+    | while read -r LINE; do
+      local ALIAS="${LINE%% *}"
+      local VERSION="${LINE#* }"
+
+      mkdir -p "$(dirname "$ALIASES_PATH/$ALIAS")"
+
+      if [[ "$VERSION" =~ ^(v|V)([0-9\.]+)$ ]]; then
+        ln -sf "$DEFINITIONS_PATH/${BASH_REMATCH[2]}" "$ALIASES_PATH/$ALIAS"
+      else
+        ln -sf "$ALIASES_PATH/$VERSION" "$ALIASES_PATH/$ALIAS"
+      fi
+    done
+
+  local MANIFEST
+  read -ra MANIFEST < <(echo "$INDEX_TABLE" | grep src | sort -rn -t $'\t' -k2,2 -k1,1 | head -1)
+  local LATEST="${MANIFEST[0]}"
+  ln -sf "$DEFINITIONS_PATH/${LATEST##*v}" "$ALIASES_PATH/node"
+
+  local VERSIONS_PATH
+  VERSIONS_PATH="$(nodenv root)/versions"
+  local ALIASES ALIAS
+  IFS=" " read -ra ALIASES <<< "$(get_aliases)"
+
+  for ALIAS in "${ALIASES[@]}"; do
+    if [ -L "$VERSIONS_PATH/$ALIAS" ]; then
+      local REALPATH
+      REALPATH=$(realpath "$VERSIONS_PATH/$ALIAS")
+      local DEFINITION
+      DEFINITION=$(resolve_definition "$ALIAS")
+
+      if [ "${REALPATH##*/}" != "$DEFINITION" ]; then
+        rm -f "$VERSIONS_PATH/$ALIAS"
+
+        if [ "$1" = "--upgrade" ]; then
+          nodenv install "$ALIAS"
+        fi
+      fi
+    fi
+  done
+}
+
+version() {
+  cat "$(realdir "${BASH_SOURCE[0]}")/../VERSION"
+}
+
+aliases_path() {
+  echo "$(realdir "${BASH_SOURCE[0]}")/../share/node-build"
+}
+
+definitions_path() {
+  echo "$(realdir "$(command -v nodenv-install)")/../share/node-build"
+}
+
+case "$#" in
+  0 )
+    list
+    ;;
+
+  1 )
+    case "$1" in
+      --update )
+        update
+        ;;
+      --version | --aliases_path | --definitions_path )
+        "${1##*-}"
+        ;;
+      * )
+        nodenv-help --usage aliases >&2
+        ;;
+    esac
+    ;;
+
+  2 )
+    case "$1" in
+      --update )
+        if [ "$2" = "--upgrade" ]; then
+          update "$2"
+        else
+          nodenv-help --usage aliases >&2
+        fi
+        ;;
+      --resolve_definition | --resolve_aliases )
+        "${1##*-}" "$2"
+        ;;
+      * )
+        nodenv-help --usage aliases >&2
+        ;;
+    esac
+    ;;
+
+  * )
+    nodenv-help --usage aliases >&2
+    ;;
+esac
