@@ -169,7 +169,8 @@ update() {
       }')
 
   while read -r LINE; do
-    local ALIAS="${LINE%% *}" VERSION="${LINE#* }" SOURCE_FILE="$ALIASES_PATH/$VERSION"
+    local ALIAS="${LINE%% *}" VERSION="${LINE#* }"
+    local SOURCE_FILE="$ALIASES_PATH/$VERSION"
 
     mkdir -p "$(dirname "$ALIASES_PATH/$ALIAS")"
 
