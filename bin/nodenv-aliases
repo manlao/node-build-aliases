@@ -83,7 +83,7 @@ resolve_aliases() {
 }
 
 get_aliases() {
-  local PATTERN ITEM PREFIX="${1+$1/}" ALIASES=() DIRS=()
+  local PATTERN ITEM PREFIX="${1:+$1/}" ALIASES=() DIRS=()
   PATTERN="$(aliases_path)/$PREFIX*"
 
   for ITEM in $PATTERN; do
@@ -168,6 +168,8 @@ update() {
         }
       }')
 
+  rm -rf "${ALIASES_PATH:?}/*"
+
   while read -r LINE; do
     local ALIAS="${LINE%% *}" VERSION="${LINE#* }"
     local SOURCE_FILE="$ALIASES_PATH/$VERSION"
@@ -206,7 +208,7 @@ update() {
       DEFINITION=$(resolve_definition "$ALIAS")
 
       if [ "${REALPATH##*/}" != "$DEFINITION" ]; then
-        rm -f "$VERSIONS_PATH/$ALIAS"
+        rm -f "${VERSIONS_PATH:?}/${ALIAS:?}"
 
         if [ "$1" = "--upgrade" ]; then
           nodenv install "$ALIAS"
