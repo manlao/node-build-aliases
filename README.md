@@ -14,8 +14,6 @@ git clone https://github.com/manlao/node-build-aliases.git $(nodenv root)/plugin
 brew install manlao/tap/node-build-aliases
 ```
 
-### macOS
-
 ## Usage
 
 List all aliases
