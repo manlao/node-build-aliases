@@ -129,11 +129,18 @@ get_alias_info() {
 }
 
 list() {
-  local ALIASES ALIAS
+  local VERSION ALIASES ALIAS PREFIX
+  VERSION=$(nodenv version-name)
   IFS=" " read -ra ALIASES <<< "$(get_aliases)"
 
   for ALIAS in "${ALIASES[@]}"; do
-    get_alias_info "$ALIAS"
+    if [ "$VERSION" = "$ALIAS" ]; then
+      PREFIX="*"
+    else
+      PREFIX=" "
+    fi
+
+    echo "$PREFIX $(get_alias_info "$ALIAS")"
   done
 }
 
