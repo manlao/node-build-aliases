@@ -22,13 +22,13 @@ List all aliases
 nodenv aliases
 ```
 
-Update aliases from nodejs.org and remove aliases in $NODENV_ROOT/versions
+Update aliases from nodejs.org
 
 ```shell
 nodenv aliases --update
 ```
 
-Update aliases from nodejs.org and modify aliases in $NODENV_ROOT/versions (and auto install version if not installed)
+Update aliases from nodejs.org and upgrade installed aliases
 
 ```shell
 nodenv aliases --update --upgrade

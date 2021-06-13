@@ -3,12 +3,11 @@
 # Summary: List or Update Node aliases
 #
 # Usage: nodenv aliases
-#        nodenv aliases --update [--upgrade [--uninstall]]
+#        nodenv aliases --update [--upgrade]
 #        nodenv aliases --version
 #
 #   --update        Update aliases from nodejs.org
 #     --upgrade          Upgrade installed aliases
-#       --uninstall          Uninstall current installed aliaes before upgrading
 #   --version          Show version of node-build-aliases
 #
 # More: https://github.com/manlao/node-build-aliases
@@ -219,10 +218,7 @@ update() {
         rm -f "${VERSIONS_PATH:?}/${ALIAS:?}"
 
         if [ "$1" = "--upgrade" ]; then
-          if [ "$2" = "--uninstall" ]; then
-            nodenv uninstall -f "${REALPATH##*/}"
-          fi
-
+          nodenv uninstall -f "${REALPATH##*/}"
           nodenv install "$ALIAS"
         fi
       fi
@@ -237,7 +233,7 @@ version() {
 }
 
 aliases_path() {
-  echo "$(realdir "${BASH_SOURCE[0]}")/../share/node-build"
+  echo "$(nodenv root)/plugins/node-build-aliases/share/node-build"
 }
 
 definitions_path() {
@@ -280,21 +276,6 @@ case "$#" in
         ;;
       --resolve_definition | --resolve_aliases )
         "${1##*-}" "$2"
-        ;;
-      * )
-        nodenv-help --usage aliases >&2
-        ;;
-    esac
-    ;;
-
-  3 )
-    case "$1" in
-      --update )
-        if [ "$2" = "--upgrade" ] && [ "$3" = "--uninstall" ]; then
-          update "$2" "$3"
-        else
-          nodenv-help --usage aliases >&2
-        fi
         ;;
       * )
         nodenv-help --usage aliases >&2
