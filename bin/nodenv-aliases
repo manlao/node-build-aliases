@@ -49,21 +49,16 @@ realdir() {
 }
 
 resolve_definition() {
-  local ALIASES_PATH ALIAS="$1" DEFINITION=""
+  local ALIASES_PATH ALIAS="$1" DEFINITION="$1"
   ALIASES_PATH=$(aliases_path)
 
-  while [ -z "$DEFINITION" ]; do
-    local REALPATH
-    REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
-
-    if [ -L "$REALPATH" ]; then
-      ALIAS="${REALPATH/$ALIASES_PATH\//}"
-    else
-      DEFINITION="${REALPATH##*/}"
-    fi
+  while [ -f "$ALIASES_PATH/$DEFINITION" ]; do
+    DEFINITION="$(< "$ALIASES_PATH/$DEFINITION")"
   done
 
-  echo "$DEFINITION"
+  if [ "$DEFINITION" != "$ALIAS" ]; then
+    echo "$DEFINITION"
+  fi
 }
 
 resolve_aliases() {
@@ -87,7 +82,7 @@ get_aliases() {
   PATTERN="$(aliases_path)/$PREFIX*"
 
   for ITEM in $PATTERN; do
-    if [ -L "$ITEM" ]; then
+    if [ -f "$ITEM" ]; then
       ALIASES+=("$PREFIX${ITEM##*/}")
     elif [ -d "$ITEM" ]; then
       DIRS+=("$ITEM")
@@ -104,23 +99,15 @@ get_aliases() {
 }
 
 get_alias_info() {
-  local DEFINITION ALIASES_PATH ALIAS="$1" INFO="$ALIAS"
+  local ALIASES_PATH ALIAS="$1" INFO="$1" TARGET="$1"
   ALIASES_PATH=$(aliases_path)
 
-  while [ -z "$DEFINITION" ]; do
-    local REALPATH
-    REALPATH=$(resolve_link "$ALIASES_PATH/$ALIAS")
-
-    if [ -L "$REALPATH" ]; then
-      ALIAS="${REALPATH/$ALIASES_PATH\//}"
-      INFO="$INFO -> $ALIAS"
-    else
-      DEFINITION="${REALPATH##*/}"
-      INFO="$INFO -> $DEFINITION"
-    fi
+  while [ -f "$ALIASES_PATH/$TARGET" ]; do
+    TARGET="$(< "$ALIASES_PATH/$TARGET")"
+    INFO="$INFO -> $TARGET"
   done
 
-  if [ -d "$(nodenv root)/versions/$DEFINITION" ]; then
+  if [ -d "$(nodenv root)/versions/$TARGET" ]; then
     echo "$INFO (installed)"
   else
     echo "$INFO"
@@ -149,10 +136,8 @@ update() {
     nodenv update-version-defs
   fi
 
-  local ALIASES_PATH DEFINITIONS_PATH PLUGIN_DEFINITIONS_PATH INDEX_TABLE
+  local ALIASES_PATH INDEX_TABLE
   ALIASES_PATH=$(aliases_path)
-  DEFINITIONS_PATH=$(definitions_path)
-  PLUGIN_DEFINITIONS_PATH=$(plugin_definitions_path)
   INDEX_TABLE=$(curl -fsSL "https://nodejs.org/dist/index.tab")
 
   # https://github.com/nvm-sh/nvm/blob/master/nvm.sh
@@ -179,30 +164,20 @@ update() {
 
   while read -r LINE; do
     local ALIAS="${LINE%% *}" VERSION="${LINE#* }"
-    local SOURCE_FILE="$ALIASES_PATH/$VERSION"
 
     mkdir -p "$(dirname "$ALIASES_PATH/$ALIAS")"
 
     if [[ "$VERSION" =~ ^(v|V)([0-9\.]+)$ ]]; then
-      if [ -f "$DEFINITIONS_PATH/${BASH_REMATCH[2]}" ]; then
-        SOURCE_FILE="$DEFINITIONS_PATH/${BASH_REMATCH[2]}"
-      elif [ -n "$PLUGIN_DEFINITIONS_PATH" ] && [ -f "$PLUGIN_DEFINITIONS_PATH/${BASH_REMATCH[2]}" ]; then
-        SOURCE_FILE="$PLUGIN_DEFINITIONS_PATH/${BASH_REMATCH[2]}"
-      fi
+      VERSION="${BASH_REMATCH[2]}"
     fi
 
-    ln -sf "$SOURCE_FILE" "$ALIASES_PATH/$ALIAS"
+    echo "$VERSION" > "$ALIASES_PATH/$ALIAS"
   done <<< "$LTS_LINES"
 
   local MANIFEST LATEST
-  read -ra MANIFEST < <(echo "$INDEX_TABLE" | grep src | sort -rn -t $'\t' -k2,2 -k1,1 | head -1)
+  read -ra MANIFEST < <(echo "$INDEX_TABLE" | grep src | sort -t. -u -k 1.2,1n -k 2,2n -k 3,3n | tail -1)
   LATEST="${MANIFEST[0]##*v}"
-
-  if [ -f "$DEFINITIONS_PATH/$LATEST" ]; then
-    ln -sf "$DEFINITIONS_PATH/$LATEST" "$ALIASES_PATH/node"
-  elif [ -n "$PLUGIN_DEFINITIONS_PATH" ] && [ -f "$PLUGIN_DEFINITIONS_PATH/$LATEST" ]; then
-    ln -sf "$PLUGIN_DEFINITIONS_PATH/$LATEST" "$ALIASES_PATH/node"
-  fi
+  echo "$LATEST" > "$ALIASES_PATH/node"
 
   local VERSIONS_PATH ALIASES ALIAS
   VERSIONS_PATH="$(nodenv root)/versions"
@@ -229,7 +204,7 @@ update() {
 }
 
 version() {
-  cat "$(realdir "${BASH_SOURCE[0]}")/../VERSION"
+  echo "$(< "$(realdir "${BASH_SOURCE[0]}")/../VERSION")"
 }
 
 aliases_path() {
@@ -260,7 +235,7 @@ case "$#" in
         "${1##*-}"
         ;;
       * )
-        nodenv-help --usage aliases >&2
+        nodenv help --usage aliases >&2
         ;;
     esac
     ;;
@@ -271,19 +246,19 @@ case "$#" in
         if [ "$2" = "--upgrade" ]; then
           update "$2"
         else
-          nodenv-help --usage aliases >&2
+          nodenv help --usage aliases >&2
         fi
         ;;
       --resolve_definition | --resolve_aliases )
         "${1##*-}" "$2"
         ;;
       * )
-        nodenv-help --usage aliases >&2
+        nodenv help --usage aliases >&2
         ;;
     esac
     ;;
 
   * )
-    nodenv-help --usage aliases >&2
+    nodenv help --usage aliases >&2
     ;;
 esac
