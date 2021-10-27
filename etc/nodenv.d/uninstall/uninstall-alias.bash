@@ -17,7 +17,7 @@ unalias_versions() {
       for ALIAS in "${ALIASES[@]}"; do
         if [ -L "$NODENV_ROOT/versions/$ALIAS" ]; then
           rm -f "${NODENV_ROOT:?}/versions/${ALIAS:?}"
-          echo "Unalias: $ALIAS"
+          echo "Unalias: $ALIAS -> $VERSION_NAME"
         fi
       done
     fi
