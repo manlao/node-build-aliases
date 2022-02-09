@@ -194,7 +194,7 @@ update() {
 
         if [ "$1" = "--upgrade" ]; then
           nodenv uninstall -f "${REALPATH##*/}"
-          nodenv install "$ALIAS"
+          nodenv install -s "$ALIAS"
         fi
       fi
     fi
