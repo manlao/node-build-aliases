@@ -195,6 +195,9 @@ update() {
         if [ "$1" = "--upgrade" ]; then
           nodenv uninstall -f "${REALPATH##*/}"
           nodenv install -s "$ALIAS"
+          nodenv shell "$ALIAS"
+          corepack enable npm pnpm yarn
+          nodenv shell --unset
         fi
       fi
     fi
