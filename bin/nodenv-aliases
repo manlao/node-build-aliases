@@ -243,7 +243,7 @@ case "$#" in
   2 )
     case "$1" in
       --update )
-        if [ "$2" = "--upgrade" ]; then
+        if [ "$2" = "--upgrade" ] || [ "$2" = "--upgrade-and-enable-corepack" ]; then
           update "$2"
         else
           nodenv help --usage aliases >&2

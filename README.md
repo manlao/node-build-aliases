@@ -33,3 +33,9 @@ Update aliases from nodejs.org and upgrade installed aliases
 ```shell
 nodenv aliases --update --upgrade
 ```
+
+Update aliases from nodejs.org, upgrade installed aliases and enable corepack
+
+```shell
+nodenv aliases --update --upgrade-and-enable-corepack
+```
