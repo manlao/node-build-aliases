@@ -2,7 +2,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v?[0-9]+.[0-9]+.[0-9]+'
+      - "v?[0-9]+.[0-9]+.[0-9]+"
 
 jobs:
   github:
@@ -13,7 +13,7 @@ jobs:
   homebrew:
     runs-on: ubuntu-latest
     steps:
-      - uses: mislav/bump-homebrew-formula-action@v1
+      - uses: mislav/bump-homebrew-formula-action@v3
         with:
           formula-name: node-build-aliases
           homebrew-tap: manlao/homebrew-tap
