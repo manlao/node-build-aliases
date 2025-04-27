@@ -53,7 +53,7 @@ resolve_definition() {
   ALIASES_PATH=$(aliases_path)
 
   while [ -f "$ALIASES_PATH/$DEFINITION" ]; do
-    DEFINITION="$(< "$ALIASES_PATH/$DEFINITION")"
+    DEFINITION="$(<"$ALIASES_PATH/$DEFINITION")"
   done
 
   if [ "$DEFINITION" != "$ALIAS" ]; then
@@ -63,7 +63,7 @@ resolve_definition() {
 
 resolve_aliases() {
   local ALIASES ALIAS RESOLVED=()
-  IFS=" " read -ra ALIASES <<< "$(get_aliases)"
+  IFS=" " read -ra ALIASES <<<"$(get_aliases)"
 
   for ALIAS in "${ALIASES[@]}"; do
     local DEFINITION=
@@ -103,7 +103,7 @@ get_alias_info() {
   ALIASES_PATH=$(aliases_path)
 
   while [ -f "$ALIASES_PATH/$TARGET" ]; do
-    TARGET="$(< "$ALIASES_PATH/$TARGET")"
+    TARGET="$(<"$ALIASES_PATH/$TARGET")"
     INFO="$INFO -> $TARGET"
   done
 
@@ -117,7 +117,7 @@ get_alias_info() {
 list() {
   local VERSION ALIASES ALIAS PREFIX
   VERSION=$(nodenv version-name)
-  IFS=" " read -ra ALIASES <<< "$(get_aliases)"
+  IFS=" " read -ra ALIASES <<<"$(get_aliases)"
 
   for ALIAS in "${ALIASES[@]}"; do
     if [ "$VERSION" = "$ALIAS" ]; then
@@ -142,9 +142,9 @@ update() {
 
   # https://github.com/nvm-sh/nvm/blob/master/nvm.sh
   local LTS_LINES
-  LTS_LINES=$(echo "$INDEX_TABLE" \
-    | command sed "1d; s/^//;" \
-    | command awk '{
+  LTS_LINES=$(echo "$INDEX_TABLE" |
+    command sed "1d; s/^//;" |
+    command awk '{
         if ($10 ~ /^\-?$/) { next }
         if ($10 && !a[tolower($10)]++) {
           if (alias) { print alias, version }
@@ -171,17 +171,17 @@ update() {
       VERSION="${BASH_REMATCH[2]}"
     fi
 
-    echo "$VERSION" > "$ALIASES_PATH/$ALIAS"
-  done <<< "$LTS_LINES"
+    echo "$VERSION" >"$ALIASES_PATH/$ALIAS"
+  done <<<"$LTS_LINES"
 
   local MANIFEST LATEST
   read -ra MANIFEST < <(echo "$INDEX_TABLE" | grep src | sort -t. -u -k 1.2,1n -k 2,2n -k 3,3n | tail -1)
   LATEST="${MANIFEST[0]##*v}"
-  echo "$LATEST" > "$ALIASES_PATH/node"
+  echo "$LATEST" >"$ALIASES_PATH/node"
 
   local VERSIONS_PATH ALIASES ALIAS
   VERSIONS_PATH="$(nodenv root)/versions"
-  IFS=" " read -ra ALIASES <<< "$(get_aliases)"
+  IFS=" " read -ra ALIASES <<<"$(get_aliases)"
 
   for ALIAS in "${ALIASES[@]}"; do
     if [ -L "$VERSIONS_PATH/$ALIAS" ]; then
@@ -195,9 +195,9 @@ update() {
         if [ "$1" = "--upgrade" ]; then
           nodenv uninstall -f "${REALPATH##*/}"
           nodenv install -s "$ALIAS"
-          nodenv shell "$ALIAS"
+          # https://github.com/nodenv/nodenv#nodenv-shell
+          export NODENV_VERSION="$ALIAS"
           corepack enable npm pnpm yarn
-          nodenv shell --unset
         fi
       fi
     fi
@@ -207,7 +207,7 @@ update() {
 }
 
 version() {
-  echo "$(< "$(realdir "${BASH_SOURCE[0]}")/../VERSION")"
+  echo "$(<"$(realdir "${BASH_SOURCE[0]}")/../VERSION")"
 }
 
 aliases_path() {
@@ -225,43 +225,43 @@ plugin_definitions_path() {
 }
 
 case "$#" in
-  0 )
-    list
-    ;;
+0)
+  list
+  ;;
 
-  1 )
-    case "$1" in
-      --update )
-        update
-        ;;
-      --version | --aliases_path | --definitions_path | --plugin_definitions_path )
-        "${1##*-}"
-        ;;
-      * )
-        nodenv help --usage aliases >&2
-        ;;
-    esac
+1)
+  case "$1" in
+  --update)
+    update
     ;;
-
-  2 )
-    case "$1" in
-      --update )
-        if [ "$2" = "--upgrade" ] || [ "$2" = "--upgrade-and-enable-corepack" ]; then
-          update "$2"
-        else
-          nodenv help --usage aliases >&2
-        fi
-        ;;
-      --resolve_definition | --resolve_aliases )
-        "${1##*-}" "$2"
-        ;;
-      * )
-        nodenv help --usage aliases >&2
-        ;;
-    esac
+  --version | --aliases_path | --definitions_path | --plugin_definitions_path)
+    "${1##*-}"
     ;;
-
-  * )
+  *)
     nodenv help --usage aliases >&2
     ;;
+  esac
+  ;;
+
+2)
+  case "$1" in
+  --update)
+    if [ "$2" = "--upgrade" ] || [ "$2" = "--upgrade-and-enable-corepack" ]; then
+      update "$2"
+    else
+      nodenv help --usage aliases >&2
+    fi
+    ;;
+  --resolve_definition | --resolve_aliases)
+    "${1##*-}" "$2"
+    ;;
+  *)
+    nodenv help --usage aliases >&2
+    ;;
+  esac
+  ;;
+
+*)
+  nodenv help --usage aliases >&2
+  ;;
 esac
