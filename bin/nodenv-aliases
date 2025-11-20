@@ -197,6 +197,7 @@ update() {
           nodenv install -s "$ALIAS"
           # https://github.com/nodenv/nodenv#nodenv-shell
           export NODENV_VERSION="$ALIAS"
+          npm install -g corepack
           corepack enable npm pnpm yarn
         fi
       fi
