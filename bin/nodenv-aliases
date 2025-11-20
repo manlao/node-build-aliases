@@ -192,13 +192,16 @@ update() {
       if [ "${REALPATH##*/}" != "$DEFINITION" ]; then
         rm -f "${VERSIONS_PATH:?}/${ALIAS:?}"
 
-        if [ "$1" = "--upgrade" ]; then
+        if [ "$1" = "--upgrade" ] || [ "$1" = "--upgrade-and-enable-corepack" ]; then
           nodenv uninstall -f "${REALPATH##*/}"
           nodenv install -s "$ALIAS"
-          # https://github.com/nodenv/nodenv#nodenv-shell
-          export NODENV_VERSION="$ALIAS"
-          npm install -g corepack
-          corepack enable npm pnpm yarn
+
+          if [ "$1" = "--upgrade-and-enable-corepack" ]; then
+            # https://github.com/nodenv/nodenv#nodenv-shell
+            export NODENV_VERSION="$ALIAS"
+            npm install -g corepack
+            corepack enable npm pnpm yarn
+          fi
         fi
       fi
     fi
