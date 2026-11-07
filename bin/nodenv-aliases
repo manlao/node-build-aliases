@@ -138,14 +138,27 @@ update() {
 
   local ALIASES_PATH INDEX_TABLE
   ALIASES_PATH=$(aliases_path)
-  INDEX_TABLE=$(curl -fsSL "https://nodejs.org/dist/index.tab")
+  # Validate versions before using the remote index to generate any aliases.
+  if ! INDEX_TABLE=$(curl -fsSL "https://nodejs.org/dist/index.tab"); then
+    echo "Failed to download the Node.js version index" >&2
+    return 1
+  fi
+  INDEX_TABLE=$(echo "$INDEX_TABLE" |
+    command awk 'NR > 1 && $1 ~ /^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$/ { print }')
+
+  local MANIFEST LATEST
+  if ! read -ra MANIFEST < <(echo "$INDEX_TABLE" | grep src | sort -t. -u -k 1.2,1n -k 2,2n -k 3,3n | tail -1); then
+    echo "The Node.js version index contains no usable releases" >&2
+    return 1
+  fi
+  LATEST="${MANIFEST[0]#v}"
 
   # https://github.com/nvm-sh/nvm/blob/master/nvm.sh
   local LTS_LINES
   LTS_LINES=$(echo "$INDEX_TABLE" |
-    command sed "1d; s/^//;" |
     command awk '{
         if ($10 ~ /^\-?$/) { next }
+        if (tolower($10) !~ /^[a-z0-9][a-z0-9._-]*$/) { next }
         if ($10 && !a[tolower($10)]++) {
           if (alias) { print alias, version }
           alias_name = "lts/" tolower($10)
@@ -160,48 +173,61 @@ update() {
         }
       }')
 
-  rm -rf "${ALIASES_PATH:?}/*"
+  mkdir -p "$ALIASES_PATH"
+  rm -rf "${ALIASES_PATH:?}/"*
 
   while read -r LINE; do
+    [ -n "$LINE" ] || continue
     local ALIAS="${LINE%% *}" VERSION="${LINE#* }"
 
     mkdir -p "$(dirname "$ALIASES_PATH/$ALIAS")"
 
-    if [[ "$VERSION" =~ ^(v|V)([0-9\.]+)$ ]]; then
-      VERSION="${BASH_REMATCH[2]}"
-    fi
+    VERSION="${VERSION#v}"
 
     echo "$VERSION" >"$ALIASES_PATH/$ALIAS"
   done <<<"$LTS_LINES"
 
-  local MANIFEST LATEST
-  read -ra MANIFEST < <(echo "$INDEX_TABLE" | grep src | sort -t. -u -k 1.2,1n -k 2,2n -k 3,3n | tail -1)
-  LATEST="${MANIFEST[0]##*v}"
   echo "$LATEST" >"$ALIASES_PATH/node"
 
-  local VERSIONS_PATH ALIASES ALIAS
+  local VERSIONS_PATH ALIASES ALIAS DEFINITION
+  local CONFIGURED=() CONFIGURED_VERSION ALREADY_CONFIGURED
   VERSIONS_PATH="$(nodenv root)/versions"
   IFS=" " read -ra ALIASES <<<"$(get_aliases)"
 
   for ALIAS in "${ALIASES[@]}"; do
     if [ -L "$VERSIONS_PATH/$ALIAS" ]; then
-      local REALPATH DEFINITION
-      REALPATH=$(realpath "$VERSIONS_PATH/$ALIAS")
       DEFINITION=$(resolve_definition "$ALIAS")
 
-      if [ "${REALPATH##*/}" != "$DEFINITION" ]; then
-        rm -f "${VERSIONS_PATH:?}/${ALIAS:?}"
+      if [ "$1" = "--upgrade" ] || [ "$1" = "--upgrade-and-enable-corepack" ]; then
+        # Install the concrete version first, keeping the old installation and
+        # alias usable if installation fails. Repair aliases even with -s.
+        nodenv install -s "$DEFINITION"
+        ln -sfn "$VERSIONS_PATH/$DEFINITION" "$VERSIONS_PATH/$ALIAS"
 
-        if [ "$1" = "--upgrade" ] || [ "$1" = "--upgrade-and-enable-corepack" ]; then
-          nodenv uninstall -f "${REALPATH##*/}"
-          nodenv install -s "$ALIAS"
+        if [ "$1" = "--upgrade-and-enable-corepack" ]; then
+          ALREADY_CONFIGURED=
+          for CONFIGURED_VERSION in "${CONFIGURED[@]}"; do
+            if [ "$CONFIGURED_VERSION" = "$DEFINITION" ]; then
+              ALREADY_CONFIGURED=1
+              break
+            fi
+          done
+          [ -z "$ALREADY_CONFIGURED" ] || continue
 
-          if [ "$1" = "--upgrade-and-enable-corepack" ]; then
-            # https://github.com/nodenv/nodenv#nodenv-shell
-            export NODENV_VERSION="$ALIAS"
-            npm install -g corepack
-            corepack enable npm pnpm yarn
-          fi
+          # Bootstrap with the bundled npm CLI, even if npm is already a
+          # Corepack shim. Explicit version and prefix keep installation local
+          # to this Node version. exec needs no existing command shim.
+          NODENV_VERSION="$DEFINITION" nodenv exec node "$VERSIONS_PATH/$DEFINITION/lib/node_modules/npm/bin/npm-cli.js" install -g --prefix "$VERSIONS_PATH/$DEFINITION" corepack
+          nodenv rehash
+          NODENV_VERSION="$DEFINITION" nodenv exec corepack enable --install-directory "$VERSIONS_PATH/$DEFINITION/bin" npm pnpm yarn
+          nodenv rehash
+          CONFIGURED+=("$DEFINITION")
+        fi
+      else
+        local REALPATH
+        REALPATH=$(realpath "$VERSIONS_PATH/$ALIAS")
+        if [ "${REALPATH##*/}" != "$DEFINITION" ]; then
+          rm -f "${VERSIONS_PATH:?}/${ALIAS:?}"
         fi
       fi
     fi
