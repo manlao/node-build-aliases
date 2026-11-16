@@ -13,7 +13,7 @@ jobs:
   homebrew:
     runs-on: ubuntu-latest
     steps:
-      - uses: mislav/bump-homebrew-formula-action@v3
+      - uses: mislav/bump-homebrew-formula-action@v4
         with:
           formula-name: node-build-aliases
           homebrew-tap: manlao/homebrew-tap
